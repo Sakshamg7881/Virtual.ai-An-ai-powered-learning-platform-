@@ -7,11 +7,19 @@
     "start": "node server/index.js",
     "dev": "node server/index.js"
   },
-  "keywords": ["education", "learning", "3d", "quiz", "interactive"],
+  "keywords": [
+    "education",
+    "learning",
+    "3d",
+    "quiz",
+    "interactive"
+  ],
   "author": "Saksham",
   "license": "ISC",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.5",
+    "dotenv": "^18.0.9",
     "express": "^4.21.2"
   }
 }

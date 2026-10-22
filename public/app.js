@@ -52,23 +52,49 @@ const BADGES = [
 ];
 
 const NAV = [
-  ['home', 'Home'], ['dash', 'Dashboard'], ['learn', '3D Learn'], ['tutor', 'Demo Tutor'],
+  ['home', 'Home'], ['dash', 'Dashboard'], ['learn', '3D Learn'], ['tutor', 'AI Tutor'],
   ['lab', 'Science Lab'], ['quiz', 'Quiz'], ['courses', 'Courses'], ['res', 'Resources'], ['about', 'About']
 ];
 
 // ─── Backend Connection ─────────────────────────────────────────────────────
 let backendOnline = false;
+let aiConfigured = false;
+let backendDashboard = null;
+let backendCourses = null;
+
 async function checkBackend() {
   try {
     const r = await fetch(API + '/api/health', { signal: AbortSignal.timeout(3000) });
     const d = await r.json();
     backendOnline = d.status === 'ok';
-  } catch { backendOnline = false; }
+    if (backendOnline) {
+      try {
+        const aiR = await fetch(API + '/api/ai/status', { signal: AbortSignal.timeout(3000) });
+        const aiD = await aiR.json();
+        aiConfigured = Boolean(aiD.configured);
+      } catch { aiConfigured = false; }
+
+      // Fetch dashboard & courses data in background
+      try {
+        const [dashRes, courseRes] = await Promise.all([
+          fetch(API + '/api/dashboard', { signal: AbortSignal.timeout(3000) }),
+          fetch(API + '/api/courses', { signal: AbortSignal.timeout(3000) })
+        ]);
+        if (dashRes.ok) backendDashboard = await dashRes.json();
+        if (courseRes.ok) backendCourses = await courseRes.json();
+      } catch { /* keep defaults */ }
+    }
+  } catch {
+    backendOnline = false;
+    aiConfigured = false;
+  }
   const dot = $('#connection-status');
   if (dot) {
     dot.classList.toggle('online', backendOnline);
     dot.classList.toggle('offline', !backendOnline);
-    dot.title = backendOnline ? 'Backend: connected' : 'Backend: offline — local features still work';
+    dot.title = backendOnline
+      ? (aiConfigured ? 'Backend: connected (Gemini AI active ⚡)' : 'Backend: connected (Demo AI active)')
+      : 'Backend: offline — local features still work';
   }
 }
 
@@ -239,7 +265,7 @@ V.home = () => `
     <div class="grid-3 mt-4">
       ${[
         ['🧊', '3D Learning', 'learn', 'Rotate, zoom, and inspect labelled models with interactive controls.'],
-        ['🤖', 'Demo Tutor', 'tutor', 'Predefined answers for introductory maths, physics, chemistry, and CS.'],
+        ['🤖', 'AI Tutor Agent', 'tutor', 'Powered by Google Gemini 1.5 Flash for personalized STEM tutoring.'],
         ['🔬', 'Science Lab', 'lab', 'Circuit simulator plus projectile, pendulum, and wave experiments.'],
         ['📝', 'Quizzes', 'quiz', 'Multiple categories with instant feedback and score tracking.'],
         ['📖', 'Resources', 'res', 'Searchable notes, formula sheets, and learning paths.'],
@@ -347,6 +373,35 @@ V.dash = () => {
         </div>` : '<p class="text-muted text-sm">No activity yet. Complete topics and take quizzes to build your history.</p>'}
       </div>
     </div>
+
+    ${backendDashboard ? `
+    <div class="card mt-4" style="border:1px solid var(--accent-primary);background:var(--accent-soft)">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h3 class="font-bold flex items-center gap-2">
+          <span>⚡ Backend Demo Metrics (GET /api/dashboard)</span>
+        </h3>
+        <span class="chip" style="background:var(--bg-primary);color:var(--accent-primary);font-weight:700">Sample Demo Data</span>
+      </div>
+      <p class="text-xs text-muted mt-1">Live student benchmark metrics served by the Node.js Express backend. Your personal progress on this device is saved above via LocalStorage.</p>
+      <div class="grid-4 mt-3">
+        <div class="stat-card">
+          <div class="stat-label">Demo Profile</div>
+          <div class="stat-value" style="font-size:1rem">${esc(backendDashboard.studentProfile.displayName)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Enrolled Courses</div>
+          <div class="stat-value">${backendDashboard.studentProfile.enrolledCourses}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Quizzes Completed</div>
+          <div class="stat-value">${backendDashboard.statistics.quizzesAttempted}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Benchmark Avg</div>
+          <div class="stat-value">${backendDashboard.statistics.averageScorePercent}%</div>
+        </div>
+      </div>
+    </div>` : ''}
 
     <div class="mt-4 flex gap-3">
       <button class="btn btn-secondary btn-sm" onclick="resetAll()">Reset All Progress</button>
@@ -824,15 +879,65 @@ const SAMPLE = [
   'Explain gravity', 'What is energy?', 'Explain DNA', 'What are waves?'
 ];
 
-let CH = [], LV = 'b';
+let CH = [], LV = 'b', isAsking = false;
 
-V.tutor = () => `<h1 class="section-title">Demo Tutor</h1>
-  <p class="section-subtitle"><span style="color:var(--warning)">⚠ Demo Tutor</span> — Answers are predefined for introductory maths, physics, chemistry, biology, and CS. No live AI model is connected.</p>
+function formatAiText(raw) {
+  if (!raw) return '';
+  let s = esc(raw);
+  // Bold: **text**
+  s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // Italic: *text*
+  s = s.replace(/(^|[^*])\*(?!\*)(.*?)\*/g, '$1<em>$2</em>');
+  // Headers: ### text
+  s = s.replace(/^###\s+(.+)$/gm, '<h4 style="font-weight:700;margin:8px 0 4px;color:var(--accent-primary)">$1</h4>');
+  s = s.replace(/^##\s+(.+)$/gm, '<h3 style="font-weight:700;margin:10px 0 6px;color:var(--text-primary)">$1</h3>');
+  // Bullet items
+  s = s.replace(/(?:^|\n)[*-]\s+(.+)/g, '<div style="display:flex;gap:6px;margin:3px 0"><span style="color:var(--accent-primary)">•</span><div>$1</div></div>');
+  // Double linebreaks to paragraphs
+  s = s.replace(/\n\n/g, '<div style="height:8px"></div>');
+  // Single linebreaks
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+
+function parseFollowUps(text) {
+  if (!text) return [];
+  const lines = text.split('\n');
+  const questions = [];
+  let capture = false;
+  for (const line of lines) {
+    if (/follow-up questions|suggested follow-ups|questions to explore/i.test(line)) {
+      capture = true;
+      continue;
+    }
+    if (capture) {
+      const clean = line.replace(/^[\s*-•\d.)\]]+/, '').trim();
+      if (clean && clean.length > 5 && clean.length < 100) {
+        questions.push(clean);
+      }
+    }
+  }
+  return questions.slice(0, 4);
+}
+
+V.tutor = () => `<div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h1 class="section-title">AI Tutor Agent</h1>
+      <p class="section-subtitle">
+        ${aiConfigured
+          ? '<span style="color:var(--success);font-weight:700">● Gemini AI Active</span> — Powered by Google Gemini 1.5 Flash. Ask any STEM question!'
+          : '<span style="color:var(--accent-primary);font-weight:700">⚡ AI Learning Assistant</span> — Personalized help for Physics, Chemistry, Biology, Math & CS.'}
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="chip" style="background:var(--accent-soft);color:var(--accent-primary);font-weight:700;border:1px solid var(--accent-primary)">🤖 Google Gemini</span>
+    </div>
+  </div>
 
   <div class="flex flex-wrap gap-3 items-center mt-4">
-    <span class="text-sm text-secondary font-semibold">Level:</span>
-    <button id="lb" class="btn ${LV === 'b' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setLv('b')">Beginner</button>
-    <button id="li" class="btn ${LV === 'i' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setLv('i')">Intermediate</button>
+    <span class="text-sm text-secondary font-semibold">Audience Level:</span>
+    <button id="lb" class="btn ${LV === 'b' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setLv('b')">Beginner (Intuitive & Clear)</button>
+    <button id="li" class="btn ${LV === 'i' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setLv('i')">Intermediate (In-Depth & Math)</button>
     <button class="btn btn-secondary btn-sm ml-auto" onclick="CH=[];drawChat()">Clear Chat</button>
   </div>
 
@@ -840,51 +945,134 @@ V.tutor = () => `<h1 class="section-title">Demo Tutor</h1>
     <div id="chat" class="chat-container" aria-live="polite"></div>
     <div id="sug" class="suggestions-row"></div>
     <div class="chat-input-row">
-      <input id="q" type="text" class="input" placeholder="Ask about maths, physics, chemistry, biology, or CS…" aria-label="Your question" onkeydown="event.key==='Enter'&&ask()">
-      <button class="btn btn-primary" onclick="ask()">Send</button>
+      <input id="q" type="text" class="input" placeholder="Ask anything about physics, chemistry, biology, maths, or computer science…" aria-label="Your question" onkeydown="event.key==='Enter'&&ask()">
+      <button id="send-btn" class="btn btn-primary flex items-center gap-2" onclick="ask()">
+        <span>Send</span>
+      </button>
     </div>
   </div>
 
   <div class="card mt-4">
-    <h3 class="font-bold mb-2">Supported Topics</h3>
-    <div class="flex flex-wrap gap-2">
-      ${['Pythagorean theorem', 'Derivatives', 'Newton\'s laws', 'Ohm\'s law', 'Atoms', 'Chemical bonds', 'Algorithms', 'Gravity', 'Energy', 'DNA', 'Cell biology', 'Waves'].map(t =>
-        `<span class="chip">${t}</span>`).join('')}
+    <h3 class="font-bold mb-2">💡 Tips for Getting Great Answers</h3>
+    <div class="grid-3 mt-3">
+      <div class="info-panel">
+        <b>🔬 Science Experiments</b>
+        Ask why Ohm's Law behaves the way it does in the Science Lab, or how projectile velocity decomposes into components.
+      </div>
+      <div class="info-panel">
+        <b>📐 Step-by-Step Derivations</b>
+        Ask for step-by-step math breakdowns, Pythagorean proofs, or calculus chain rule explanations.
+      </div>
+      <div class="info-panel">
+        <b>🧬 Biology & Molecules</b>
+        Inquire about DNA replication, ATP production in mitochondria, or atomic electron configurations.
+      </div>
     </div>
-    <p class="text-xs text-muted mt-3">This tutor uses pattern-matched predefined responses. Questions outside these topics will receive a "not covered" reply.</p>
   </div>`;
 
 function setLv(l) {
   LV = l;
-  $('#lb').className = `btn ${l === 'b' ? 'btn-primary' : 'btn-secondary'} btn-sm`;
-  $('#li').className = `btn ${l === 'i' ? 'btn-primary' : 'btn-secondary'} btn-sm`;
+  const lb = $('#lb');
+  const li = $('#li');
+  if (lb) lb.className = `btn ${l === 'b' ? 'btn-primary' : 'btn-secondary'} btn-sm`;
+  if (li) li.className = `btn ${l === 'i' ? 'btn-primary' : 'btn-secondary'} btn-sm`;
 }
 
 function drawChat() {
   const c = $('#chat');
+  if (!c) return;
   c.innerHTML = CH.length
-    ? CH.map(m => `<div class="chat-msg ${m.r === 'u' ? 'chat-user' : 'chat-tutor'}">${esc(m.x)}</div>`).join('')
-    : '<p class="text-muted text-sm">Pick a sample question or type your own.</p>';
+    ? CH.map(m => {
+        const body = m.html ? formatAiText(m.x) : esc(m.x);
+        const badge = (m.r === 't' && m.provider)
+          ? `<div class="text-xs mb-1" style="font-weight:700;letter-spacing:0.02em;color:${m.isDemo ? 'var(--text-muted)' : 'var(--success)'}">${m.isDemo ? '📋 ' + esc(m.provider) : '✨ ' + esc(m.provider)}</div>`
+          : '';
+        return `<div class="chat-msg ${m.r === 'u' ? 'chat-user' : 'chat-tutor'}">${badge}${body}</div>`;
+      }).join('')
+    : '<p class="text-muted text-sm">Welcome to your AI Tutor! Type any question above or choose a suggested topic below.</p>';
   c.scrollTop = c.scrollHeight;
   const last = CH[CH.length - 1];
-  const fl = last && last.f ? last.f : SAMPLE.slice(0, 5);
-  $('#sug').innerHTML = fl.map(s => `<button class="btn btn-secondary btn-sm" onclick="ask(this.textContent)">${esc(s)}</button>`).join('');
+  const fl = last && last.f && last.f.length ? last.f : SAMPLE.slice(0, 5);
+  const sug = $('#sug');
+  if (sug) {
+    sug.innerHTML = fl.map(s => `<button class="btn btn-secondary btn-sm" onclick="ask(this.textContent)">${esc(s)}</button>`).join('');
+  }
 }
 
-function ask(t) {
+async function ask(t) {
+  if (isAsking) return;
   const i = $('#q');
-  t = (t || i.value).trim();
+  t = (t || (i ? i.value : '')).trim();
   if (!t) return;
-  i.value = '';
+  if (i) i.value = '';
+
+  // Add user prompt to chat
+  CH.push({ r: 'u', x: t });
+  act('Asked AI Tutor: ' + t.slice(0, 50));
+  save();
+  drawChat();
+
+  const c = $('#chat');
+  const sendBtn = $('#send-btn');
+  if (sendBtn) sendBtn.disabled = true;
+  isAsking = true;
+
+  // Add loading indicator bubble
+  const loader = document.createElement('div');
+  loader.className = 'chat-msg chat-tutor flex items-center gap-2';
+  loader.id = 'chat-loader';
+  loader.innerHTML = `<span class="animate-pulse" style="display:inline-flex;align-items:center;gap:6px">
+    <span>${aiConfigured ? '✨ Gemini AI is generating response...' : '⚡ AI Assistant is retrieving answer...'}</span>
+  </span>`;
+  if (c) {
+    c.appendChild(loader);
+    c.scrollTop = c.scrollHeight;
+  }
+
+  try {
+    const res = await fetch(API + '/api/assistant/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: t,
+        level: LV,
+        history: CH.slice(-6)
+      }),
+      signal: AbortSignal.timeout(25000)
+    });
+
+    const data = await res.json();
+    if (res.ok && data.reply) {
+      const followUps = parseFollowUps(data.reply);
+      CH.push({
+        r: 't',
+        x: data.reply,
+        html: true,
+        isDemo: Boolean(data.isDemo),
+        provider: data.provider || (aiConfigured ? 'Google Gemini 1.5 Flash' : 'Predefined Demo Responses'),
+        f: followUps.length ? followUps : SAMPLE.slice(0, 4)
+      });
+    } else {
+      fallbackAsk(t);
+    }
+  } catch (err) {
+    console.warn('AI chat error, using pattern-matcher:', err);
+    fallbackAsk(t);
+  } finally {
+    isAsking = false;
+    if (sendBtn) sendBtn.disabled = false;
+    save();
+    drawChat();
+  }
+}
+
+function fallbackAsk(t) {
   const l = t.toLowerCase();
   const h = TUT.find(e => e.k.some(k => l.includes(k)));
-  CH.push({ r: 'u', x: t });
   CH.push(h
-    ? { r: 't', x: (LV === 'b' ? '[Beginner] ' : '[Intermediate] ') + h[LV], f: h.f }
-    : { r: 't', x: 'I\'m a demo tutor with a small set of predefined topics, and I don\'t have an answer for that one. Try one of the suggestions below.', f: SAMPLE.slice(0, 5) }
+    ? { r: 't', x: (LV === 'b' ? '[Beginner] ' : '[Intermediate] ') + h[LV], f: h.f, isDemo: true, provider: 'Predefined Demo Responses' }
+    : { r: 't', x: 'I am currently in Demo Mode. You can ask about introductory concepts like Ohm\'s law, Newton\'s laws, atoms, derivatives, or algorithms!', f: SAMPLE.slice(0, 5), isDemo: true, provider: 'Predefined Demo Responses' }
   );
-  if (h) act('Asked Demo Tutor: ' + t.slice(0, 50));
-  save(); drawChat();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1418,7 +1606,7 @@ const QS = {
 
 let Q = null;
 
-const qStart = c => { Q = { c, i: 0, sel: null, score: 0, saved: false, fin: false }; $('#app').innerHTML = V.quiz(); };
+const qStart = c => { Q = { c, i: 0, sel: null, score: 0, answers: [], saved: false, fin: false, serverValidated: false, feedback: '' }; $('#app').innerHTML = V.quiz(); };
 
 V.quiz = () => {
   if (!Q) {
@@ -1437,10 +1625,10 @@ V.quiz = () => {
       : '';
 
     return `<h1 class="section-title">Quiz</h1>
-      <p class="section-subtitle">Choose a category. Earn 10 points per correct answer, plus a 10-point bonus for a perfect score.</p>
+      <p class="section-subtitle">Choose a category. Questions and scoring are validated by the backend with points saved to LocalStorage.</p>
       <div class="grid-auto mt-4">${CATS.map(c => {
         const a = S.quizzes.filter(q => q.c === c);
-        const qCount = QS[c] ? QS[c].length : 3;
+        const qCount = QS[c] ? QS[c].length : 5;
         return `<button class="card card-hover" style="cursor:pointer;text-align:left" onclick="qStart('${c}')">
           <div class="flex items-center gap-3">
             <div class="topic-icon">${c === 'Mathematics' ? '📐' : c === 'Physics' ? '⚛️' : c === 'Chemistry' ? '🧪' : c === 'Computer Science' ? '💻' : '🧬'}</div>
@@ -1460,7 +1648,8 @@ V.quiz = () => {
       <h1 class="section-title">${Q.c} — Results</h1>
       <div style="font-size:4rem;font-weight:900;margin:20px 0" class="gradient-text">${Q.score}/${L.length}</div>
       <p class="text-secondary">${p}% · ${Q.earned} points earned</p>
-      <p class="text-muted text-sm mt-2">${p === 100 ? 'Perfect score! 🏅🎉' : p >= 67 ? 'Nice work! Keep it up!' : 'Keep practising — review the Resources and retry.'}</p>
+      ${Q.serverValidated ? `<div class="chip chip-success mt-2" style="font-size:0.75rem">⚡ Verified & Scored on Server (POST /api/quizzes/submit)</div>` : ''}
+      <p class="text-muted text-sm mt-2">${Q.feedback || (p === 100 ? 'Perfect score! 🏅🎉' : p >= 67 ? 'Nice work! Keep it up!' : 'Keep practising — review the Resources and retry.')}</p>
       <div class="flex gap-3 justify-center mt-6">
         <button class="btn btn-primary" onclick="qStart('${Q.c}')">Retry</button>
         <button class="btn btn-secondary" onclick="Q=null;go()">Categories</button>
@@ -1499,14 +1688,40 @@ V.quiz = () => {
 function qAns(i) {
   if (!Q || Q.sel !== null) return;
   Q.sel = i;
+  Q.answers[Q.i] = i;
   if (i === QS[Q.c][Q.i][2]) Q.score++;
   $('#app').innerHTML = V.quiz();
 }
 
-function qNext() {
+async function qNext() {
   const L = QS[Q.c];
-  if (Q.i + 1 < L.length) { Q.i++; Q.sel = null; }
-  else {
+  if (Q.i + 1 < L.length) {
+    Q.i++;
+    Q.sel = null;
+    $('#app').innerHTML = V.quiz();
+  } else {
+    // Validate and score on backend if online
+    if (backendOnline) {
+      try {
+        const res = await fetch(API + '/api/quizzes/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category: Q.c, answers: Q.answers }),
+          signal: AbortSignal.timeout(4000)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            Q.serverValidated = true;
+            Q.score = data.score;
+            Q.feedback = data.feedback;
+          }
+        }
+      } catch (e) {
+        console.warn('Backend quiz submit failed, using client score:', e);
+      }
+    }
+
     if (!Q.saved) {
       Q.saved = true;
       Q.earned = Q.score * 10 + (Q.score === L.length ? 10 : 0);
@@ -1516,8 +1731,8 @@ function qNext() {
       save();
     }
     Q.fin = true;
+    $('#app').innerHTML = V.quiz();
   }
-  $('#app').innerHTML = V.quiz();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1528,22 +1743,41 @@ V.courses = () => {
 
   // Try loading from backend; fallback to static content
   const staticCourses = [
-    { id: 'physics-fundamentals', title: 'Physics Fundamentals', category: 'Physics', description: 'Core physics concepts from mechanics to electromagnetism.', topics: ['Solar System', 'EM Field'] },
-    { id: 'biology-basics', title: 'Biology Basics', category: 'Biology', description: 'Introduction to living systems — cells, organs, and genetics.', topics: ['Human Heart', 'Human Cell', 'DNA Structure'] },
-    { id: 'chemistry-intro', title: 'Chemistry Introduction', category: 'Chemistry', description: 'Atoms, molecules, and chemical bonding fundamentals.', topics: ['Atom Structure', 'Water Molecule'] },
-    { id: 'maths-geometry', title: 'Mathematics & Geometry', category: 'Mathematics', description: 'Explore geometric shapes, properties, and spatial reasoning.', topics: ['Geometric Shapes'] }
+    { id: 'physics-fundamentals', title: 'Physics Fundamentals', category: 'Physics', difficulty: 'Beginner to Intermediate', lessonCount: 5, description: 'Core physics concepts from mechanics to electromagnetism.', topics: ['Solar System', 'EM Field'] },
+    { id: 'biology-basics', title: 'Biology Basics', category: 'Biology', difficulty: 'Beginner', lessonCount: 6, description: 'Introduction to living systems — cells, organs, and genetics.', topics: ['Human Heart', 'Human Cell', 'DNA Structure'] },
+    { id: 'chemistry-intro', title: 'Chemistry Introduction', category: 'Chemistry', difficulty: 'Beginner', lessonCount: 5, description: 'Atoms, molecules, and chemical bonding fundamentals.', topics: ['Atom Structure', 'Water Molecule'] },
+    { id: 'maths-geometry', title: 'Mathematics & Geometry', category: 'Mathematics', difficulty: 'Beginner', lessonCount: 4, description: 'Explore geometric shapes, properties, and spatial reasoning.', topics: ['Geometric Shapes'] },
+    { id: 'computer-science-core', title: 'Computer Science & Modern Technology', category: 'Computer Science', difficulty: 'Beginner', lessonCount: 6, description: 'Understand computational thinking, algorithms, and web APIs.', topics: ['Algorithms & Problem Solving', 'Web Technologies'] }
   ];
 
-  coursesHtml = staticCourses.map(c => {
+  const courseList = (Array.isArray(backendCourses) && backendCourses.length > 0)
+    ? backendCourses.map(bc => {
+        const matchingStatic = staticCourses.find(sc => sc.id === bc.id);
+        return {
+          id: bc.id,
+          title: bc.title,
+          category: bc.category,
+          difficulty: bc.difficulty || 'Beginner',
+          lessonCount: bc.lessonCount || 4,
+          description: bc.description,
+          topics: (matchingStatic && matchingStatic.topics) ? matchingStatic.topics : ['Solar System']
+        };
+      })
+    : staticCourses;
+
+  coursesHtml = courseList.map(c => {
     const topicsDone = c.topics.filter(t => S.done.includes(t)).length;
     const pct = c.topics.length ? Math.round(topicsDone / c.topics.length * 100) : 0;
     return `<div class="card course-card card-hover">
-      <div class="course-category">${c.category}</div>
+      <div class="flex items-center justify-between mb-1">
+        <div class="course-category">${c.category}</div>
+        <span class="chip" style="font-size:0.7rem;background:var(--accent-soft);color:var(--accent-primary);font-weight:600">${c.difficulty} · ${c.lessonCount} lessons</span>
+      </div>
       <div class="course-title">${c.title}</div>
       <div class="course-desc">${c.description}</div>
       <div class="mt-3">
         <div class="flex justify-between text-xs mb-1">
-          <span class="text-muted">${topicsDone}/${c.topics.length} topics</span>
+          <span class="text-muted">${topicsDone}/${c.topics.length} topics completed</span>
           <span class="font-semibold">${pct}%</span>
         </div>
         <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
