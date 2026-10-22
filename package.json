@@ -1,0 +1,17 @@
+{
+  "name": "virtuallearn-ai",
+  "version": "1.0.0",
+  "description": "VirtualLearn AI — Interactive learning platform with 3D models, virtual labs, quizzes, and progress tracking",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "keywords": ["education", "learning", "3d", "quiz", "interactive"],
+  "author": "Saksham",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}

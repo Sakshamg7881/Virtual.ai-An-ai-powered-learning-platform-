@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VirtualLearn AI — Learn Beyond Reality</title>
+<meta name="description" content="VirtualLearn AI: Interactive learning with 3D models, virtual labs, quizzes, and progress tracking. Learn Beyond Reality. Experience Knowledge.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ─── Header ─────────────────────────────────────────────────────────── -->
+<header id="site-header">
+  <div class="header-inner">
+    <a href="#home" class="logo" aria-label="VirtualLearn AI home">
+      <span class="logo-icon">🎓</span>
+      <span class="logo-text">VirtualLearn AI</span>
+    </a>
+    <nav id="nav" aria-label="Main navigation"></nav>
+    <div class="header-right">
+      <button id="theme-toggle" class="icon-btn" aria-label="Toggle light/dark theme" onclick="toggleTheme()">
+        <span class="theme-icon-light">☀️</span>
+        <span class="theme-icon-dark">🌙</span>
+      </button>
+      <div id="connection-status" class="connection-dot" title="Backend: checking…"></div>
+      <span id="who" class="user-badge"></span>
+      <button id="mobile-menu-btn" class="icon-btn mobile-only" aria-label="Open menu" onclick="toggleMobileMenu()">☰</button>
+    </div>
+  </div>
+</header>
+
+<!-- ─── Mobile Menu Overlay ────────────────────────────────────────────── -->
+<div id="mobile-menu" class="mobile-menu" aria-hidden="true">
+  <div class="mobile-menu-header">
+    <span class="logo-text">VirtualLearn AI</span>
+    <button class="icon-btn" onclick="toggleMobileMenu()" aria-label="Close menu">✕</button>
+  </div>
+  <nav id="mobile-nav" class="mobile-nav"></nav>
+</div>
+
+<!-- ─── Main Content ───────────────────────────────────────────────────── -->
+<main id="app"></main>
+
+<!-- ─── Footer ─────────────────────────────────────────────────────────── -->
+<footer id="site-footer">
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <span class="logo-text">🎓 VirtualLearn AI</span>
+        <p class="footer-tagline">Learn Beyond Reality. Experience Knowledge.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Explore</h4>
+        <a href="#learn">3D Learning</a>
+        <a href="#lab">Science Lab</a>
+        <a href="#quiz">Quizzes</a>
+        <a href="#res">Resources</a>
+      </div>
+      <div class="footer-links">
+        <h4>More</h4>
+        <a href="#tutor">Demo Tutor</a>
+        <a href="#dash">Dashboard</a>
+        <a href="#courses">Courses</a>
+        <a href="#about">About</a>
+      </div>
+      <div class="footer-links">
+        <h4>Info</h4>
+        <p>Free · No login · Works offline</p>
+        <p>Data stored in your browser only</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>VirtualLearn AI — An interactive learning platform. Built with ❤️ for students.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
