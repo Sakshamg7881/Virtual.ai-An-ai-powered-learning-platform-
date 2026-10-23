@@ -113,8 +113,8 @@ function initTheme() {
   if (saved) {
     document.documentElement.setAttribute('data-theme', saved);
   } else {
-    // Default to light as specified in requirements
-    document.documentElement.setAttribute('data-theme', 'light');
+    // Default to dark navy theme with blue, cyan, and violet accents
+    document.documentElement.setAttribute('data-theme', 'dark');
   }
 }
 
@@ -734,6 +734,8 @@ V.learn = () => {
           <button class="btn btn-secondary btn-sm" onclick="zoom(-1)" aria-label="Zoom in">＋ Zoom</button>
           <button class="btn btn-secondary btn-sm" onclick="zoom(1)" aria-label="Zoom out">− Zoom</button>
           <button id="au" class="btn btn-secondary btn-sm active" onclick="R3&&(R3.auto=!R3.auto,this.classList.toggle('active'))">Auto-rotate</button>
+          <button id="wf" class="btn btn-secondary btn-sm" onclick="toggleWireframe()">Wireframe</button>
+          <button class="btn btn-secondary btn-sm" onclick="cycleSpeed()">Speed: <span id="speedVal">1x</span></button>
           <button class="btn btn-secondary btn-sm" onclick="R3&&(R3.root.rotation.set(0,0,0))">Reset View</button>
         </div>
       </div>
@@ -741,7 +743,7 @@ V.learn = () => {
       <div>
         <div class="card">
           <h2 class="font-bold">${MT[cur3]}</h2>
-          <div id="info" class="info-panel mt-3">Select a part to see its label and explanation.</div>
+          <div id="info" class="info-panel mt-3">Select a component below to inspect its scientific definition and functioning.</div>
           <div class="flex flex-wrap gap-2 mt-3" id="parts">
             ${M.parts.map((p, i) => `<button class="part-btn" data-i="${i}" onclick="pick(${i})">${p[0]}</button>`).join('')}
           </div>
@@ -753,10 +755,41 @@ V.learn = () => {
     </div>`;
 };
 
+function toggleWireframe() {
+  if (!R3) return;
+  R3.wireframe = !R3.wireframe;
+  R3.root.traverse(o => {
+    if (o.isMesh && o.material) {
+      if (Array.isArray(o.material)) o.material.forEach(m => m.wireframe = R3.wireframe);
+      else o.material.wireframe = R3.wireframe;
+    }
+  });
+  const btn = $('#wf');
+  if (btn) btn.classList.toggle('active', R3.wireframe);
+}
+
+function cycleSpeed() {
+  if (!R3) return;
+  const speeds = [0.5, 1.0, 1.5, 2.0];
+  const curIdx = speeds.indexOf(R3.speed || 1.0);
+  R3.speed = speeds[(curIdx + 1) % speeds.length];
+  const spVal = $('#speedVal');
+  if (spVal) spVal.textContent = R3.speed + 'x';
+}
+
 function pick(i) {
   sel = i;
   const P = (R3 ? R3.M : MODELS[cur3]()).parts[i];
-  $('#info').innerHTML = `<b>${P[0]}</b>${P[1]}`;
+  const infoEl = $('#info');
+  if (infoEl) {
+    infoEl.innerHTML = `<div class="edu-card">
+      <div class="edu-heading">${esc(P[0])}</div>
+      <p class="edu-step">${esc(P[1])}</p>
+      <div class="takeaway-box mt-2">
+        <b>💡 Key Takeaway:</b> ${esc(P[0])} is an essential component of the ${esc(MT[cur3])} model. Ask the floating AI Tutor anytime to delve deeper!
+      </div>
+    </div>`;
+  }
   $$('#parts button').forEach(b => b.classList.toggle('active', +b.dataset.i === i));
   if (R3) R3.root.traverse(o => {
     if (o.isMesh && o.userData.p !== undefined)
@@ -1218,44 +1251,59 @@ function labUpd() {
 
 // ─── Projectile Motion ──────────────────────────────────────────────────────
 let projAnim = null;
+let projGravity = 9.8;
 
 function renderProjectileLab() {
   return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="lab-grid">
     <div class="card">
-      <h3 class="font-bold mb-3">🎯 Projectile Motion</h3>
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold">🎯 Projectile Motion Simulator</h3>
+        <span class="chip" style="font-size:0.75rem">Newtonian Mechanics</span>
+      </div>
       <canvas id="projCanvas" class="experiment-canvas" width="600" height="260"></canvas>
-      <div class="sim-control-row">
+      <div class="sim-control-row mt-3">
         <div class="sim-control-group">
-          <label>Velocity: <span id="projV">20</span> m/s</label>
+          <label class="text-xs font-semibold">Launch Speed: <span id="projV">20</span> m/s</label>
           <input type="range" min="5" max="50" value="20" id="projVel" oninput="$('#projV').textContent=this.value">
         </div>
         <div class="sim-control-group">
-          <label>Angle: <span id="projA">45</span>°</label>
-          <input type="range" min="10" max="80" value="45" id="projAng" oninput="$('#projA').textContent=this.value">
+          <label class="text-xs font-semibold">Launch Angle: <span id="projA">45</span>°</label>
+          <input type="range" min="10" max="85" value="45" id="projAng" oninput="$('#projA').textContent=this.value">
         </div>
-        <button class="btn btn-primary btn-sm" onclick="fireProjectile()">Launch</button>
-        <button class="btn btn-secondary btn-sm" onclick="clearProjectile()">Reset</button>
+        <div class="sim-control-group">
+          <label class="text-xs font-semibold">Gravity Environment:</label>
+          <select id="projGravSelect" class="input" style="padding:4px 8px;font-size:0.8rem" onchange="projGravity=+this.value;fireProjectile()">
+            <option value="9.8">Earth (g = 9.80 m/s²)</option>
+            <option value="1.62">Moon (g = 1.62 m/s²)</option>
+            <option value="3.72">Mars (g = 3.72 m/s²)</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button class="btn btn-primary btn-sm flex-1" onclick="fireProjectile()">🚀 Launch Projectile</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearProjectile()">↺ Reset</button>
       </div>
     </div>
     <div class="card">
-      <h4 class="font-bold mb-2">Projectile Equations</h4>
+      <h4 class="font-bold mb-2">Theoretical Kinematics</h4>
       <div class="info-panel">
-        <b>Horizontal: x = v₀ cos(θ) · t</b>
-        Horizontal velocity remains constant (no air resistance).
-
-<b>Vertical: y = v₀ sin(θ) · t − ½gt²</b>
-        Gravity pulls the projectile down at g = 9.8 m/s².
-
-<b>Range: R = v₀² sin(2θ) / g</b>
-        Maximum range occurs at θ = 45°.
+        <div class="formula-box mb-2">
+          <b>Horizontal:</b> <code>x(t) = v₀ · cos(θ) · t</code> (constant velocity)
+        </div>
+        <div class="formula-box mb-2">
+          <b>Vertical:</b> <code>y(t) = v₀ · sin(θ) · t − ½ · g · t²</code> (gravitational acceleration)
+        </div>
+        <div class="formula-box">
+          <b>Range:</b> <code>R = (v₀² · sin(2θ)) ÷ g</code> (maximum at θ = 45°)
+        </div>
       </div>
       <div class="mt-4">
-        <h4 class="font-bold text-sm mb-2">Results</h4>
+        <h4 class="font-bold text-sm mb-2">Calculated Results & Telemetry</h4>
         <div id="projResults" class="grid-2">
-          <div class="reading-card"><div class="reading-label">Range</div><div class="reading-value" id="projRange">—</div></div>
-          <div class="reading-card"><div class="reading-label">Max Height</div><div class="reading-value" id="projHeight">—</div></div>
-          <div class="reading-card"><div class="reading-label">Flight Time</div><div class="reading-value" id="projTime">—</div></div>
-          <div class="reading-card"><div class="reading-label">Impact Speed</div><div class="reading-value" id="projImpact">—</div></div>
+          <div class="reading-card"><div class="reading-label">Total Range (R)</div><div class="reading-value" id="projRange">—</div></div>
+          <div class="reading-card"><div class="reading-label">Apex Height (H_max)</div><div class="reading-value" id="projHeight">—</div></div>
+          <div class="reading-card"><div class="reading-label">Flight Duration (t)</div><div class="reading-value" id="projTime">—</div></div>
+          <div class="reading-card"><div class="reading-label">Impact Velocity</div><div class="reading-value" id="projImpact">—</div></div>
         </div>
       </div>
     </div>
@@ -1268,15 +1316,15 @@ function fireProjectile() {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
-  const v0 = +$('#projVel').value;
-  const angleDeg = +$('#projAng').value;
+  const v0 = Math.max(1, +($('#projVel') ? $('#projVel').value : 20));
+  const angleDeg = Math.min(89, Math.max(5, +($('#projAng') ? $('#projAng').value : 45)));
   const angle = angleDeg * Math.PI / 180;
-  const g = 9.8;
+  const g = projGravity || 9.8;
 
   const vx = v0 * Math.cos(angle), vy = v0 * Math.sin(angle);
-  const tFlight = 2 * vy / g;
+  const tFlight = (2 * vy) / g;
   const range = vx * tFlight;
-  const maxH = vy * vy / (2 * g);
+  const maxH = (vy * vy) / (2 * g);
 
   // Scale
   const scaleX = (w - 80) / Math.max(range, 1);
@@ -1286,10 +1334,10 @@ function fireProjectile() {
   const startX = 40;
 
   // Update results
-  const pr = $('#projRange'); if (pr) pr.textContent = range.toFixed(1) + ' m';
-  const ph = $('#projHeight'); if (ph) ph.textContent = maxH.toFixed(1) + ' m';
+  const pr = $('#projRange'); if (pr) pr.textContent = range.toFixed(2) + ' m';
+  const ph = $('#projHeight'); if (ph) ph.textContent = maxH.toFixed(2) + ' m';
   const pt = $('#projTime'); if (pt) pt.textContent = tFlight.toFixed(2) + ' s';
-  const pi = $('#projImpact'); if (pi) pi.textContent = v0.toFixed(1) + ' m/s';
+  const pi = $('#projImpact'); if (pi) pi.textContent = v0.toFixed(2) + ' m/s';
 
   const trail = [];
   let t = 0;
@@ -1564,176 +1612,475 @@ function initLab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// VIEW: QUIZ
+// VIEW: ADVANCED QUIZ SYSTEM (52 STEM Questions · 5 Modes · Real Explanations)
 // ═══════════════════════════════════════════════════════════════════════════
-const QS = {
-  Mathematics: [
-    ['What is 3² + 4²?', ['12', '25', '49', '7'], 1],
-    ['What is the derivative of x²?', ['x', '2x', 'x²', '2'], 1],
-    ['A right triangle has legs 6 and 8. Its hypotenuse is…', ['10', '14', '12', '100'], 0],
-    ['What is the area of a circle with radius 5?', ['25π', '10π', '5π', '50π'], 0],
-    ['sin(30°) equals…', ['1/2', '√3/2', '1', '√2/2'], 0],
-  ],
-  Physics: [
-    ['What is the SI unit of force?', ['Joule', 'Watt', 'Newton', 'Pascal'], 2],
-    ['A 2 kg mass is pushed by 10 N. Its acceleration is…', ['20 m/s²', '5 m/s²', '0.2 m/s²', '12 m/s²'], 1],
-    ['In I = V/R, doubling R (same V) makes I…', ['double', 'stay same', 'halve', 'quadruple'], 2],
-    ['What is the speed of light approximately?', ['3×10⁶ m/s', '3×10⁸ m/s', '3×10¹⁰ m/s', '3×10⁴ m/s'], 1],
-    ['Kinetic energy is calculated as…', ['mv', '½mv²', 'mgh', 'Fd'], 1],
-  ],
-  Chemistry: [
-    ['Chemical symbol for sodium?', ['S', 'So', 'Na', 'N'], 2],
-    ['H₂O is the formula for…', ['Hydrogen peroxide', 'Water', 'Salt', 'Oxygen'], 1],
-    ['The pH of pure water is about…', ['1', '7', '10', '14'], 1],
-    ['How many electrons does carbon have?', ['4', '6', '8', '12'], 1],
-    ['Which bond involves electron sharing?', ['Ionic', 'Covalent', 'Metallic', 'Hydrogen'], 1],
-  ],
-  'Computer Science': [
-    ['What is 5 in binary?', ['110', '011', '101', '111'], 2],
-    ['Which structure repeats instructions?', ['Variable', 'Comment', 'Loop', 'Constant'], 2],
-    ['An algorithm is…', ['A computer brand', 'A step-by-step procedure', 'A type of virus', 'A screen'], 1],
-    ['What does CPU stand for?', ['Central Processing Unit', 'Central Program Utility', 'Computer Personal Unit', 'Central Power Unit'], 0],
-    ['Which data structure uses FIFO?', ['Stack', 'Queue', 'Tree', 'Array'], 1],
-  ],
-  Biology: [
-    ['What organelle produces energy (ATP)?', ['Nucleus', 'Ribosome', 'Mitochondria', 'Golgi'], 2],
-    ['DNA base pairs: A pairs with…', ['G', 'C', 'T', 'U'], 2],
-    ['The basic unit of life is the…', ['Organ', 'Tissue', 'Cell', 'Atom'], 2],
-    ['Photosynthesis occurs in…', ['Mitochondria', 'Chloroplasts', 'Nucleus', 'Ribosomes'], 1],
-    ['How many chromosomes do humans have?', ['23', '46', '44', '48'], 1],
-  ]
-};
-
 let Q = null;
+let quizTimer = null;
+let quizTimeLeft = 45;
+let quizReviewFilter = 'all';
+let activeQuizMode = 'topic';
+let activeQuizCategory = 'Mathematics';
+let activeDifficultyFilter = 'all';
 
-const qStart = c => { Q = { c, i: 0, sel: null, score: 0, answers: [], saved: false, fin: false, serverValidated: false, feedback: '' }; $('#app').innerHTML = V.quiz(); };
+function getQuizBank() {
+  if (typeof QUIZ_DATA !== 'undefined' && Array.isArray(QUIZ_DATA.questions)) {
+    return QUIZ_DATA.questions;
+  }
+  return [];
+}
 
-V.quiz = () => {
-  if (!Q) {
-    // Quiz history
-    const historyHtml = S.quizzes.length > 0
-      ? `<div class="card mt-6">
-          <h3 class="font-bold mb-3">📊 Quiz History</h3>
-          <div class="grid-auto">${S.quizzes.slice(-8).reverse().map(q =>
-            `<div class="card" style="padding:12px">
-              <div class="text-xs text-muted">${q.c}</div>
-              <div class="font-bold">${Math.round(q.s / q.n * 100)}%</div>
-              <div class="text-xs text-muted">${q.s}/${q.n} correct</div>
-            </div>`).join('')}
-          </div>
-        </div>`
-      : '';
+function startQuiz(mode, category) {
+  if (quizTimer) { clearInterval(quizTimer); quizTimer = null; }
+  activeQuizMode = mode || 'topic';
+  if (category) activeQuizCategory = category;
 
-    return `<h1 class="section-title">Quiz</h1>
-      <p class="section-subtitle">Choose a category. Questions and scoring are validated by the backend with points saved to LocalStorage.</p>
-      <div class="grid-auto mt-4">${CATS.map(c => {
-        const a = S.quizzes.filter(q => q.c === c);
-        const qCount = QS[c] ? QS[c].length : 5;
-        return `<button class="card card-hover" style="cursor:pointer;text-align:left" onclick="qStart('${c}')">
-          <div class="flex items-center gap-3">
-            <div class="topic-icon">${c === 'Mathematics' ? '📐' : c === 'Physics' ? '⚛️' : c === 'Chemistry' ? '🧪' : c === 'Computer Science' ? '💻' : '🧬'}</div>
-            <div>
-              <div class="font-bold">${c}</div>
-              <div class="text-xs text-muted mt-1">${qCount} questions · ${a.length ? `Best ${Math.max(...a.map(q => Math.round(q.s / q.n * 100)))}% (${a.length} attempts)` : 'Not attempted'}</div>
-            </div>
-          </div>
-        </button>`;
-      }).join('')}</div>${historyHtml}`;
+  const allQuestions = getQuizBank();
+  let selectedQuestions = [];
+
+  if (activeQuizMode === 'quick') {
+    // 5 random questions across all subjects
+    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+    selectedQuestions = shuffled.slice(0, 5);
+  } else if (activeQuizMode === 'advanced') {
+    // All questions of Advanced difficulty
+    selectedQuestions = allQuestions.filter(q => q.level === 'Advanced');
+    if (selectedQuestions.length > 10) {
+      selectedQuestions = selectedQuestions.sort(() => 0.5 - Math.random()).slice(0, 10);
+    }
+  } else if (activeQuizMode === 'mixed') {
+    // 10 questions balanced across categories
+    const categories = ['Mathematics', 'Physics', 'Chemistry', 'Biology', 'Computer Science', 'General Science'];
+    categories.forEach(cat => {
+      const catQs = allQuestions.filter(q => q.category.toLowerCase() === cat.toLowerCase());
+      const shuffled = [...catQs].sort(() => 0.5 - Math.random());
+      selectedQuestions.push(...shuffled.slice(0, 2));
+    });
+    selectedQuestions = selectedQuestions.slice(0, 10);
+  } else if (activeQuizMode === 'timed') {
+    // 10 random questions with a 45-second timer
+    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+    selectedQuestions = shuffled.slice(0, 10);
+  } else {
+    // Topic-based
+    selectedQuestions = allQuestions.filter(q => q.category.toLowerCase() === activeQuizCategory.toLowerCase());
+    if (activeDifficultyFilter !== 'all') {
+      selectedQuestions = selectedQuestions.filter(q => q.level.toLowerCase() === activeDifficultyFilter.toLowerCase());
+    }
   }
 
-  const L = QS[Q.c];
-  if (Q.fin) {
-    const p = Math.round(Q.score / L.length * 100);
-    return `<div class="card text-center" style="max-width:520px;margin:0 auto;padding:40px">
-      <h1 class="section-title">${Q.c} — Results</h1>
-      <div style="font-size:4rem;font-weight:900;margin:20px 0" class="gradient-text">${Q.score}/${L.length}</div>
-      <p class="text-secondary">${p}% · ${Q.earned} points earned</p>
-      ${Q.serverValidated ? `<div class="chip chip-success mt-2" style="font-size:0.75rem">⚡ Verified & Scored on Server (POST /api/quizzes/submit)</div>` : ''}
-      <p class="text-muted text-sm mt-2">${Q.feedback || (p === 100 ? 'Perfect score! 🏅🎉' : p >= 67 ? 'Nice work! Keep it up!' : 'Keep practising — review the Resources and retry.')}</p>
-      <div class="flex gap-3 justify-center mt-6">
-        <button class="btn btn-primary" onclick="qStart('${Q.c}')">Retry</button>
-        <button class="btn btn-secondary" onclick="Q=null;go()">Categories</button>
-        <a class="btn btn-secondary" href="#dash">Dashboard</a>
+  if (selectedQuestions.length === 0) {
+    selectedQuestions = allQuestions.slice(0, 5);
+  }
+
+  Q = {
+    mode: activeQuizMode,
+    category: activeQuizCategory,
+    questions: selectedQuestions,
+    answers: new Array(selectedQuestions.length).fill(null),
+    i: 0,
+    fin: false,
+    score: 0,
+    earned: 0,
+    serverValidated: false,
+    feedback: '',
+    results: []
+  };
+
+  quizReviewFilter = 'all';
+
+  if (activeQuizMode === 'timed') {
+    quizTimeLeft = 45;
+    quizTimer = setInterval(() => {
+      quizTimeLeft--;
+      const timeVal = $('#quizTimerVal');
+      const timeBar = $('#quizTimerBar');
+      if (timeVal) timeVal.textContent = quizTimeLeft + 's';
+      if (timeBar) timeBar.style.width = ((quizTimeLeft / 45) * 100) + '%';
+      if (quizTimeLeft <= 0) {
+        clearInterval(quizTimer);
+        quizTimer = null;
+        submitQuiz();
+      }
+    }, 1000);
+  }
+
+  $('#app').innerHTML = V.quiz();
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function selectQuizOption(optIdx) {
+  if (!Q || Q.fin) return;
+  Q.answers[Q.i] = optIdx;
+  $('#app').innerHTML = V.quiz();
+}
+
+function jumpToQuestion(idx) {
+  if (!Q || Q.fin) return;
+  if (idx >= 0 && idx < Q.questions.length) {
+    Q.i = idx;
+    $('#app').innerHTML = V.quiz();
+  }
+}
+
+async function submitQuiz() {
+  if (!Q || Q.fin) return;
+  if (quizTimer) { clearInterval(quizTimer); quizTimer = null; }
+
+  const questionIds = Q.questions.map(q => q.id);
+  let serverResults = null;
+
+  if (backendOnline) {
+    try {
+      const res = await fetch(API + '/api/quizzes/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: Q.mode === 'topic' ? Q.category : 'Mixed Subjects',
+          answers: Q.answers,
+          questionIds: questionIds
+        }),
+        signal: AbortSignal.timeout(4000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          serverResults = data;
+          Q.serverValidated = true;
+          Q.score = data.score;
+          Q.feedback = data.feedback;
+          Q.results = data.results;
+        }
+      }
+    } catch (e) {
+      console.warn('Server quiz submit failed, using local scoring:', e);
+    }
+  }
+
+  // Local fallback evaluation if offline or server failed
+  if (!serverResults) {
+    let correct = 0;
+    const resList = [];
+    Q.questions.forEach((q, idx) => {
+      const selIdx = Q.answers[idx];
+      const isAns = selIdx !== null && selIdx !== undefined;
+      const isCor = isAns && Number(selIdx) === q.answerIndex;
+      if (isCor) correct++;
+      resList.push({
+        questionId: q.id,
+        question: q.question,
+        category: q.category,
+        level: q.level,
+        selectedIndex: selIdx,
+        selectedAnswer: isAns ? q.options[selIdx] : 'Unanswered',
+        correctIndex: q.answerIndex,
+        correctAnswer: q.options[q.answerIndex],
+        isCorrect: isCor,
+        explanation: q.explanation || 'Verified STEM conceptual principle.'
+      });
+    });
+    Q.score = correct;
+    Q.results = resList;
+    const pct = Math.round((correct / Q.questions.length) * 100);
+    Q.feedback = pct === 100 ? 'Outstanding! Perfect score achieved.' : pct >= 70 ? 'Great job! Strong subject mastery.' : 'Good effort! Review the explanations below and retry.';
+  }
+
+  // Update student stats in LocalStorage
+  const total = Q.questions.length;
+  Q.earned = Q.score * 10 + (Q.score === total ? 10 : 0);
+  S.quizzes.push({
+    c: Q.mode === 'topic' ? Q.category : `${Q.mode.toUpperCase()} Quiz`,
+    s: Q.score,
+    n: total,
+    d: Date.now()
+  });
+  S.points += Q.earned;
+  act(`Completed ${Q.mode} quiz: ${Q.score}/${total} (+${Q.earned} pts)`);
+  save();
+
+  Q.fin = true;
+  $('#app').innerHTML = V.quiz();
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setReviewFilter(filterType) {
+  quizReviewFilter = filterType;
+  const container = $('#quizReviewContainer');
+  if (container && Q && Q.results) {
+    container.innerHTML = renderQuizReviewItems();
+  }
+  $$('.review-filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === filterType);
+  });
+}
+
+function renderQuizReviewItems() {
+  if (!Q || !Q.results) return '';
+  const filtered = Q.results.filter(r => {
+    if (quizReviewFilter === 'correct') return r.isCorrect;
+    if (quizReviewFilter === 'wrong') return !r.isCorrect && r.selectedIndex !== null;
+    if (quizReviewFilter === 'unanswered') return r.selectedIndex === null;
+    return true; // all
+  });
+
+  if (filtered.length === 0) {
+    return `<div class="card text-center" style="padding:24px"><p class="text-muted">No questions found matching this filter.</p></div>`;
+  }
+
+  return filtered.map((r, i) => {
+    const isUnanswered = r.selectedIndex === null;
+    const statusClass = r.isCorrect ? 'correct' : (isUnanswered ? 'unanswered' : 'wrong');
+    const statusText = r.isCorrect ? '✓ Correct' : (isUnanswered ? '⚪ Unanswered' : '✗ Incorrect');
+
+    return `<div class="review-item ${statusClass}">
+      <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-sm">Question ${i + 1}</span>
+          <span class="chip" style="font-size:0.75rem">${esc(r.category || 'STEM')}</span>
+          <span class="chip ${r.level === 'Advanced' ? 'chip-violet' : r.level === 'Intermediate' ? 'chip-blue' : 'chip-green'}" style="font-size:0.75rem">${esc(r.level || 'Standard')}</span>
+        </div>
+        <span class="font-bold text-xs ${r.isCorrect ? 'text-success' : (isUnanswered ? 'text-muted' : 'text-error')}">${statusText}</span>
+      </div>
+      <div class="font-semibold text-base mb-3" style="line-height:1.6">${esc(r.question)}</div>
+      <div class="grid-2 mb-3">
+        <div class="info-panel" style="padding:10px 14px;border-left:3px solid ${r.isCorrect ? 'var(--success)' : (isUnanswered ? 'var(--border)' : 'var(--error)')}">
+          <div class="text-xs text-muted uppercase font-bold">Your Response</div>
+          <div class="font-medium mt-1">${esc(r.selectedAnswer)}</div>
+        </div>
+        <div class="info-panel" style="padding:10px 14px;border-left:3px solid var(--success)">
+          <div class="text-xs text-muted uppercase font-bold">Verified Correct Answer</div>
+          <div class="font-medium text-success mt-1">${esc(r.correctAnswer)}</div>
+        </div>
+      </div>
+      <div class="review-explanation">
+        <div class="flex items-center gap-1 font-bold mb-1" style="color:var(--accent-primary)">
+          <span>💡 Conceptual Explanation:</span>
+        </div>
+        <div class="text-secondary text-sm" style="line-height:1.7">${esc(r.explanation)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+V.quiz = () => {
+  const allQs = getQuizBank();
+  const totalQuestionsCount = allQs.length || 52;
+
+  // 1. QUIZ DASHBOARD / SELECTION SCREEN
+  if (!Q) {
+    const cats = ['Mathematics', 'Physics', 'Chemistry', 'Biology', 'Computer Science', 'General Science'];
+
+    return `<div class="flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <h1 class="section-title">Interactive Quiz Arena</h1>
+        <p class="section-subtitle">Challenge yourself with ${totalQuestionsCount} verified STEM questions across 5 dynamic learning modes.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="chip chip-success">● Universal Question Bank (${totalQuestionsCount} Questions)</span>
+      </div>
+    </div>
+
+    <!-- Mode Selector Cards -->
+    <div class="mt-4">
+      <div class="font-bold text-sm text-muted uppercase tracking-wider mb-2">Select Quiz Mode</div>
+      <div class="quiz-mode-pill-row">
+        <button class="quiz-mode-pill ${activeQuizMode === 'topic' ? 'active' : ''}" onclick="activeQuizMode='topic';go()">📚 Topic-Based Quiz</button>
+        <button class="quiz-mode-pill ${activeQuizMode === 'quick' ? 'active' : ''}" onclick="startQuiz('quick')">⚡ Quick Practice (5 Qs)</button>
+        <button class="quiz-mode-pill ${activeQuizMode === 'advanced' ? 'active' : ''}" onclick="startQuiz('advanced')">🏆 Advanced Challenge</button>
+        <button class="quiz-mode-pill ${activeQuizMode === 'mixed' ? 'active' : ''}" onclick="startQuiz('mixed')">🎲 Mixed Subjects (10 Qs)</button>
+        <button class="quiz-mode-pill ${activeQuizMode === 'timed' ? 'active' : ''}" onclick="startQuiz('timed')">⏱️ Timed Quiz (45s)</button>
+      </div>
+    </div>
+
+    <!-- Topic Selection (when in topic mode) -->
+    <div class="mt-6">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h2 class="font-bold text-lg">STEM Subject Modules</h2>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-muted">Difficulty Filter:</span>
+          <select id="quizDiffFilter" class="input" style="padding:4px 8px;font-size:0.8rem" onchange="activeDifficultyFilter=this.value;go()">
+            <option value="all" ${activeDifficultyFilter === 'all' ? 'selected' : ''}>All Difficulties</option>
+            <option value="Beginner" ${activeDifficultyFilter === 'Beginner' ? 'selected' : ''}>Beginner Only</option>
+            <option value="Intermediate" ${activeDifficultyFilter === 'Intermediate' ? 'selected' : ''}>Intermediate Only</option>
+            <option value="Advanced" ${activeDifficultyFilter === 'Advanced' ? 'selected' : ''}>Advanced Only</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid-auto">
+        ${cats.map(c => {
+          const catQs = allQs.filter(q => q.category.toLowerCase() === c.toLowerCase());
+          const catAttempts = S.quizzes.filter(q => q.c.toLowerCase() === c.toLowerCase());
+          const bestScore = catAttempts.length ? Math.max(...catAttempts.map(q => Math.round((q.s / q.n) * 100))) : null;
+          const icon = c === 'Mathematics' ? '📐' : c === 'Physics' ? '⚛️' : c === 'Chemistry' ? '🧪' : c === 'Biology' ? '🧬' : c === 'Computer Science' ? '💻' : '🌌';
+
+          return `<div class="card card-hover flex flex-col justify-between" style="padding:22px;cursor:pointer" onclick="startQuiz('topic', '${c}')">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <span style="font-size:2rem">${icon}</span>
+                <span class="chip" style="font-size:0.75rem">${catQs.length} Questions</span>
+              </div>
+              <h3 class="font-bold text-lg mb-1">${c}</h3>
+              <p class="text-xs text-secondary mb-3">Foundational concepts, formulas, and advanced reasoning.</p>
+            </div>
+            <div class="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted">
+              <span>${catAttempts.length ? `${catAttempts.length} attempts` : 'Not attempted'}</span>
+              <span class="font-bold ${bestScore !== null ? 'text-success' : ''}">${bestScore !== null ? `Best: ${bestScore}%` : 'Start →'}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- Quiz History Component -->
+    ${S.quizzes.length > 0 ? `
+    <div class="card mt-6" style="padding:24px">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-base">📊 Recent Quiz History</h3>
+        <span class="text-xs text-muted">${S.quizzes.length} total attempts recorded in LocalStorage</span>
+      </div>
+      <div class="grid-auto">
+        ${S.quizzes.slice(-6).reverse().map(q => {
+          const pct = Math.round((q.s / q.n) * 100);
+          return `<div class="card" style="padding:14px;background:var(--bg-tertiary)">
+            <div class="text-xs text-muted">${esc(q.c)}</div>
+            <div class="font-bold text-xl gradient-text mt-1">${pct}%</div>
+            <div class="text-xs text-muted mt-1">${q.s} of ${q.n} correct</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}`;
+  }
+
+  // 2. ACTIVE QUIZ SESSION SCREEN
+  if (!Q.fin) {
+    const q = Q.questions[Q.i];
+    const total = Q.questions.length;
+    const currentSelected = Q.answers[Q.i];
+    const answeredCount = Q.answers.filter(a => a !== null).length;
+
+    return `<div style="max-width:760px;margin:0 auto">
+      <!-- Quiz Header Banner -->
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div class="flex items-center gap-2">
+          <span class="chip chip-blue font-bold">${Q.mode === 'topic' ? Q.category : Q.mode.toUpperCase() + ' MODE'}</span>
+          <span class="chip ${q.level === 'Advanced' ? 'chip-violet' : q.level === 'Intermediate' ? 'chip-blue' : 'chip-green'} font-bold">${esc(q.level || 'Standard')}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          ${Q.mode === 'timed' ? `<div class="flex items-center gap-1 font-bold text-sm" style="color:var(--warning)">
+            <span>⏱️ Timer:</span>
+            <span id="quizTimerVal">${quizTimeLeft}s</span>
+          </div>` : ''}
+          <span class="text-sm text-secondary font-medium">Question ${Q.i + 1} of ${total}</span>
+        </div>
+      </div>
+
+      ${Q.mode === 'timed' ? `<div class="quiz-timer-wrapper mb-3">
+        <div id="quizTimerBar" class="quiz-timer-bar" style="width:${(quizTimeLeft / 45) * 100}%"></div>
+      </div>` : ''}
+
+      <!-- Question Jump Grid -->
+      <div class="card mb-4" style="padding:16px">
+        <div class="flex items-center justify-between text-xs text-muted mb-2">
+          <span>Question Navigation Grid</span>
+          <span>${answeredCount} of ${total} Answered</span>
+        </div>
+        <div class="quiz-nav-grid">
+          ${Q.questions.map((_, idx) => {
+            const isCurrent = idx === Q.i;
+            const isAnswered = Q.answers[idx] !== null;
+            let cls = 'quiz-nav-btn';
+            if (isCurrent) cls += ' active';
+            if (isAnswered) cls += ' answered';
+            return `<button class="${cls}" onclick="jumpToQuestion(${idx})" aria-label="Go to question ${idx + 1}">${idx + 1}</button>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Question Card -->
+      <div class="card" style="padding:32px">
+        <h2 class="font-bold mb-6" style="font-size:1.25rem;line-height:1.6">${esc(q.question)}</h2>
+
+        <div class="flex flex-col gap-3">
+          ${q.options.map((opt, optIdx) => {
+            const isChecked = currentSelected === optIdx;
+            return `<button class="quiz-option-btn ${isChecked ? 'selected' : ''}" onclick="selectQuizOption(${optIdx})">
+              <span class="option-indicator">${String.fromCharCode(65 + optIdx)}</span>
+              <span class="flex-1 text-left font-medium">${esc(opt)}</span>
+              <span class="radio-check ${isChecked ? 'checked' : ''}"></span>
+            </button>`;
+          }).join('')}
+        </div>
+
+        <!-- Action Controls -->
+        <div class="flex items-center justify-between mt-8 pt-4 border-t border-border flex-wrap gap-2">
+          <button class="btn btn-secondary btn-sm" onclick="jumpToQuestion(${Q.i - 1})" ${Q.i === 0 ? 'disabled' : ''}>← Previous</button>
+
+          <div class="flex items-center gap-2">
+            <button class="btn btn-secondary btn-sm" onclick="if(confirm('Quit quiz? Current progress will be lost.')){if(quizTimer)clearInterval(quizTimer);Q=null;go();}">Quit</button>
+            ${Q.i + 1 < total
+              ? `<button class="btn btn-primary btn-sm" onclick="jumpToQuestion(${Q.i + 1})">Next Question →</button>`
+              : `<button class="btn btn-primary btn-sm" onclick="submitQuiz()">Submit Quiz ✓</button>`
+            }
+          </div>
+        </div>
       </div>
     </div>`;
   }
 
-  const q = L[Q.i];
-  const progressDots = L.map((_, idx) => {
-    let cls = 'quiz-dot';
-    if (idx < Q.i) cls += ' done';
-    else if (idx === Q.i) cls += ' current';
-    return `<div class="${cls}"></div>`;
-  }).join('');
+  // 3. RESULTS & ANSWER REVIEW SCREEN
+  const total = Q.questions.length;
+  const pct = total > 0 ? Math.round((Q.score / total) * 100) : 0;
+  const correctCount = Q.results.filter(r => r.isCorrect).length;
+  const wrongCount = Q.results.filter(r => !r.isCorrect && r.selectedIndex !== null).length;
+  const unansweredCount = Q.results.filter(r => r.selectedIndex === null).length;
 
-  return `<div style="max-width:640px;margin:0 auto">
-    <div class="flex justify-between items-center text-sm text-muted mb-3">
-      <span>${Q.c}</span>
-      <span>Question ${Q.i + 1} of ${L.length}</span>
-    </div>
-    <div class="quiz-progress">${progressDots}</div>
-    <div class="card" style="padding:28px">
-      <h2 class="font-bold" style="font-size:1.15rem;line-height:1.5">${q[0]}</h2>
-      <div class="flex flex-col gap-3 mt-6">
-        ${q[1].map((o, i) => `<button class="quiz-option ${Q.sel !== null ? (i === q[2] ? 'correct' : i === Q.sel ? 'wrong' : '') : ''}" ${Q.sel !== null ? 'disabled' : ''} onclick="qAns(${i})">${o}</button>`).join('')}
+  return `<div style="max-width:800px;margin:0 auto">
+    <!-- Results Banner Card -->
+    <div class="card text-center" style="padding:40px">
+      <div class="chip chip-blue font-bold uppercase mb-2">${esc(Q.mode)} Results</div>
+      <h1 class="section-title mb-1">${Q.mode === 'topic' ? esc(Q.category) : 'Challenge Completed'}</h1>
+      <div style="font-size:4rem;font-weight:900;margin:16px 0" class="gradient-text">${Q.score} / ${total}</div>
+      <p class="text-secondary text-base font-medium">${pct}% Score · +${Q.earned} Points Earned</p>
+
+      ${Q.serverValidated ? `<div class="chip chip-success mt-3" style="font-size:0.8rem">⚡ Verified & Scored on Server (POST /api/quizzes/submit)</div>` : ''}
+
+      <p class="text-muted text-sm mt-3" style="max-width:480px;margin:12px auto 0">${esc(Q.feedback)}</p>
+
+      <!-- Score Breakdown Cards -->
+      <div class="grid-3 mt-6">
+        <div class="reading-card"><div class="reading-label">Correct Answers</div><div class="reading-value text-success">${correctCount}</div></div>
+        <div class="reading-card"><div class="reading-label">Incorrect Answers</div><div class="reading-value text-error">${wrongCount}</div></div>
+        <div class="reading-card"><div class="reading-label">Unanswered</div><div class="reading-value text-muted">${unansweredCount}</div></div>
       </div>
-      ${Q.sel !== null ? `<p class="mt-4 font-semibold" style="color:${Q.sel === q[2] ? 'var(--success)' : 'var(--error)'}" role="status">
-        ${Q.sel === q[2] ? '✓ Correct!' : '✗ Incorrect — the answer is "' + q[1][q[2]] + '".'}
-      </p>
-      <button class="btn btn-primary mt-4 w-full" onclick="qNext()">${Q.i + 1 < L.length ? 'Next Question →' : 'See Results'}</button>` : ''}
+
+      <div class="flex gap-3 justify-center mt-6 flex-wrap">
+        <button class="btn btn-primary" onclick="startQuiz(Q.mode, Q.category)">🔄 Retake This Quiz</button>
+        <button class="btn btn-secondary" onclick="Q=null;go()">📚 Choose Another Mode</button>
+        <a class="btn btn-secondary" href="#dash">📊 View Dashboard</a>
+      </div>
+    </div>
+
+    <!-- Review Answers Section -->
+    <div class="card mt-6" style="padding:28px">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h2 class="font-bold text-lg">Detailed Conceptual Review</h2>
+          <p class="text-xs text-muted">Step-by-step reasoning and formula explanations for every question.</p>
+        </div>
+        <div class="flex items-center gap-1">
+          <button class="btn btn-secondary btn-sm review-filter-btn ${quizReviewFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="setReviewFilter('all')">All (${total})</button>
+          <button class="btn btn-secondary btn-sm review-filter-btn ${quizReviewFilter === 'correct' ? 'active' : ''}" data-filter="correct" onclick="setReviewFilter('correct')">Correct (${correctCount})</button>
+          <button class="btn btn-secondary btn-sm review-filter-btn ${quizReviewFilter === 'wrong' ? 'active' : ''}" data-filter="wrong" onclick="setReviewFilter('wrong')">Wrong (${wrongCount})</button>
+          <button class="btn btn-secondary btn-sm review-filter-btn ${quizReviewFilter === 'unanswered' ? 'active' : ''}" data-filter="unanswered" onclick="setReviewFilter('unanswered')">Unanswered (${unansweredCount})</button>
+        </div>
+      </div>
+
+      <div id="quizReviewContainer" class="flex flex-col gap-4">
+        ${renderQuizReviewItems()}
+      </div>
     </div>
   </div>`;
 };
-
-function qAns(i) {
-  if (!Q || Q.sel !== null) return;
-  Q.sel = i;
-  Q.answers[Q.i] = i;
-  if (i === QS[Q.c][Q.i][2]) Q.score++;
-  $('#app').innerHTML = V.quiz();
-}
-
-async function qNext() {
-  const L = QS[Q.c];
-  if (Q.i + 1 < L.length) {
-    Q.i++;
-    Q.sel = null;
-    $('#app').innerHTML = V.quiz();
-  } else {
-    // Validate and score on backend if online
-    if (backendOnline) {
-      try {
-        const res = await fetch(API + '/api/quizzes/submit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ category: Q.c, answers: Q.answers }),
-          signal: AbortSignal.timeout(4000)
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            Q.serverValidated = true;
-            Q.score = data.score;
-            Q.feedback = data.feedback;
-          }
-        }
-      } catch (e) {
-        console.warn('Backend quiz submit failed, using client score:', e);
-      }
-    }
-
-    if (!Q.saved) {
-      Q.saved = true;
-      Q.earned = Q.score * 10 + (Q.score === L.length ? 10 : 0);
-      S.quizzes.push({ c: Q.c, s: Q.score, n: L.length, d: Date.now() });
-      S.points += Q.earned;
-      act(`Quiz ${Q.c}: ${Q.score}/${L.length} (+${Q.earned} points)`);
-      save();
-    }
-    Q.fin = true;
-    $('#app').innerHTML = V.quiz();
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // VIEW: COURSES
@@ -1790,6 +2137,7 @@ V.courses = () => {
 
   // Learning paths
   const paths = [
+    { title: 'Mathematics Foundation', steps: ['Number Systems & BODMAS', 'Fractions, Decimals & Percentages', 'Algebra Basics (Variables & Equations)', 'Geometry & Mensuration', 'Trigonometry (sin, cos, tan)', 'Statistics & Probability'] },
     { title: 'Physics Beginner → Intermediate', steps: ['Motion & Forces', 'Energy & Work', 'Electricity (try Science Lab)', 'Waves', 'Atoms (3D model)'] },
     { title: 'Computer Science Starter', steps: ['Binary & Data', 'Variables', 'Conditions & Loops', 'Functions', 'Simple Algorithms'] },
     { title: 'Biology Explorer', steps: ['Cell Structure', 'Human Heart', 'DNA & Genetics', 'Human Systems'] },
@@ -1896,45 +2244,82 @@ function toggleBookmark(idx) {
 // VIEW: ABOUT
 // ═══════════════════════════════════════════════════════════════════════════
 V.about = () => `<h1 class="section-title">About VirtualLearn AI</h1>
+  <p class="section-subtitle">Empowering interactive exploration in science, mathematics, and technology</p>
 
+  <!-- 1. About Description -->
   <div class="card mt-4" style="padding:28px">
+    <h3 class="font-bold text-lg mb-3 gradient-text">About VirtualLearn AI</h3>
     <p class="text-secondary" style="font-size:1.05rem;line-height:1.8">
-      VirtualLearn AI is an interactive learning platform that helps students understand concepts through simple explanations, interactive simulations, quizzes, and learning progress tracking.
-    </p>
-    <p class="text-muted mt-4">
-      Everything is free: no subscriptions, no login, no API keys. Progress is stored only in this browser using LocalStorage. The optional backend serves educational content and resets when the server restarts.
+      VirtualLearn AI is an interactive educational platform designed to make learning easier, more engaging, and more accessible. Students can explore scientific concepts through interactive 3D visualizations, understand difficult topics through guided explanations, experiment with virtual science simulations, test their knowledge with quizzes, and monitor their learning progress.
     </p>
   </div>
 
-  <div class="card mt-4">
-    <h3 class="font-bold mb-2">🖥️ Architecture</h3>
-    <div class="grid-2 mt-2">
-      <div class="info-panel">
-        <b>Frontend</b>
-        Single-page application with hash-based routing, vanilla JavaScript, CSS custom properties for theming, and Three.js for 3D rendering. Runs entirely in the browser.
+  <!-- 2. Mission & Vision -->
+  <div class="grid-2 mt-4">
+    <div class="card" style="padding:24px;border-left:4px solid var(--accent-primary)">
+      <div class="flex items-center gap-2 mb-2">
+        <span style="font-size:1.5rem">🎯</span>
+        <h3 class="font-bold" style="font-size:1.1rem">Mission</h3>
       </div>
-      <div class="info-panel">
-        <b>Backend (Optional)</b>
-        Node.js + Express server providing topic/course APIs and health-check. In-memory storage only — data resets on restart. Frontend works fully offline if backend is unavailable.
+      <p class="text-secondary" style="line-height:1.7">
+        Make complex concepts easier to understand through interactive learning, experimentation, and independent thinking.
+      </p>
+    </div>
+
+    <div class="card" style="padding:24px;border-left:4px solid var(--accent-secondary)">
+      <div class="flex items-center gap-2 mb-2">
+        <span style="font-size:1.5rem">🔭</span>
+        <h3 class="font-bold" style="font-size:1.1rem">Vision</h3>
+      </div>
+      <p class="text-secondary" style="line-height:1.7">
+        Create an engaging learning environment where students can explore ideas, practice concepts, and develop a deeper understanding of science, mathematics, and technology.
+      </p>
+    </div>
+  </div>
+
+  <!-- 3. Meet the Team -->
+  <div class="card mt-4" style="padding:28px">
+    <h3 class="font-bold text-lg mb-1">Meet the Team</h3>
+    <p class="text-xs text-muted mb-4">The creators building and designing VirtualLearn AI</p>
+
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="team-avatar-circle">S</div>
+        <div>
+          <div class="team-name">Saksham</div>
+          <div class="team-role">Founder</div>
+          <p class="team-desc">Leads the project's vision, educational experience, and overall development.</p>
+        </div>
+      </div>
+
+      <div class="team-card">
+        <div class="team-avatar-circle designer">HM</div>
+        <div>
+          <div class="team-name">Hariom Mittal</div>
+          <div class="team-role">Web Designer</div>
+          <p class="team-desc">Focuses on website design, visual presentation, layouts, and user experience.</p>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="card mt-4">
-    <h3 class="font-bold mb-2">📊 Your Stats</h3>
-    ${progress()}
-  </div>
-
-  <div class="card mt-4">
-    <h3 class="font-bold mb-2">🔗 Backend Status</h3>
-    <div class="flex items-center gap-3">
-      <div class="connection-dot ${backendOnline ? 'online' : 'offline'}"></div>
-      <span class="text-sm">${backendOnline ? 'Connected — backend is running' : 'Offline — all learning features still work locally'}</span>
-      <button class="btn btn-secondary btn-sm ml-auto" onclick="checkBackend().then(()=>go())">Refresh Status</button>
+  <!-- 4. Contact & Support -->
+  <div class="card mt-4" style="padding:28px">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <h3 class="font-bold text-lg">Contact & Support</h3>
+      <span class="demo-support-disclaimer">Fictional Demo Support</span>
     </div>
-  </div>
-
-  ${builtWith()}`;
+    <p class="text-secondary text-sm mb-3">
+      Have a question or feedback about VirtualLearn AI?
+    </p>
+    <div class="info-panel" style="padding:16px 20px">
+      <div class="text-xs text-muted uppercase font-bold">Email</div>
+      <div class="font-mono text-base font-bold mt-1" style="color:var(--accent-primary)">help@virtuallearnai.example</div>
+      <p class="text-xs text-muted mt-2">
+        Notice: <code>help@virtuallearnai.example</code> is a fictional demo email address provided for demonstration purposes. This is not a monitored support inbox, and messages sent to this address are not delivered.
+      </p>
+    </div>
+  </div>`;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ROUTER
@@ -1966,6 +2351,136 @@ function go() {
 
   if (INIT[f]) INIT[f]();
   scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLOATING AI TUTOR WIDGET — Persistent chat accessible from any section
+// ═══════════════════════════════════════════════════════════════════════════
+let floatingCH = [];   // Separate chat history for floating widget
+let floatingAsking = false;
+
+function toggleFloatingTutor() {
+  const modal = $('#floating-tutor-modal');
+  const trigger = $('#floating-tutor-trigger');
+  if (!modal) return;
+  const isOpen = modal.style.display !== 'none';
+  modal.style.display = isOpen ? 'none' : 'flex';
+  modal.setAttribute('aria-modal', !isOpen);
+  if (trigger) trigger.style.display = isOpen ? '' : 'none';
+  if (!isOpen) {
+    // Focus input when opened
+    const inp = $('#floating-user-input');
+    if (inp) setTimeout(() => inp.focus(), 100);
+    // Render current context banner
+    const banner = $('#floating-context-banner');
+    if (banner) {
+      const v = (location.hash || '#home').slice(1);
+      const labels = { home: 'Home', dash: 'Dashboard', learn: '3D Learn', tutor: 'AI Tutor', lab: 'Science Lab', quiz: 'Quiz', courses: 'Courses', res: 'Resources', about: 'About' };
+      const pill = banner.querySelector('.context-pill');
+      if (pill) pill.textContent = 'Context: ' + (labels[v] || 'General');
+    }
+    drawFloatingChat();
+  }
+}
+
+function drawFloatingChat() {
+  const stream = $('#floating-chat-stream');
+  if (!stream) return;
+  if (floatingCH.length === 0) {
+    stream.innerHTML = `<div class="text-muted text-sm" style="padding:16px;text-align:center">
+      👋 Hi! I'm your AI Tutor assistant.<br>Ask me anything about Physics, Chemistry, Biology, Maths, or Computer Science.
+    </div>`;
+  } else {
+    stream.innerHTML = floatingCH.map(m => {
+      const body = m.html ? formatAiText(m.x) : esc(m.x);
+      const badge = (m.r === 't' && m.provider)
+        ? `<div class="text-xs mb-1" style="font-weight:700;color:${m.isDemo ? 'var(--text-muted)' : 'var(--success)'}">${m.isDemo ? '📋 ' + esc(m.provider) : '✨ ' + esc(m.provider)}</div>`
+        : '';
+      return `<div class="chat-msg ${m.r === 'u' ? 'chat-user' : 'chat-tutor'}" style="margin:6px 0;padding:10px 14px;font-size:0.9rem">${badge}${body}</div>`;
+    }).join('');
+  }
+  stream.scrollTop = stream.scrollHeight;
+
+  // Render quick-action chips
+  const chipRow = $('#floating-chip-row');
+  if (chipRow) {
+    const last = floatingCH[floatingCH.length - 1];
+    const suggestions = last && last.f && last.f.length ? last.f : ['Explain Pythagorean theorem', 'What is gravity?', 'Explain quadratic formula', 'What is a derivative?'];
+    chipRow.innerHTML = suggestions.slice(0, 4).map(s => 
+      `<button class="btn btn-secondary btn-sm" style="font-size:0.75rem;padding:4px 10px" onclick="sendFloatingMessage('${esc(s.replace(/'/g, "\\'"))}')">${esc(s)}</button>`
+    ).join('');
+  }
+}
+
+async function sendFloatingMessage(text) {
+  if (floatingAsking) return;
+  const inp = $('#floating-user-input');
+  const t = (text || (inp ? inp.value : '')).trim();
+  if (!t) return;
+  if (inp) inp.value = '';
+
+  floatingCH.push({ r: 'u', x: t });
+  act('Asked Floating AI Tutor: ' + t.slice(0, 50));
+  save();
+  drawFloatingChat();
+
+  const stream = $('#floating-chat-stream');
+  const sendBtn = $('#floating-send-action');
+  if (sendBtn) sendBtn.disabled = true;
+  floatingAsking = true;
+
+  // Show loading
+  const loader = document.createElement('div');
+  loader.className = 'chat-msg chat-tutor';
+  loader.style.cssText = 'margin:6px 0;padding:10px 14px;font-size:0.9rem';
+  loader.id = 'floating-chat-loader';
+  loader.innerHTML = `<span class="animate-pulse" style="display:inline-flex;align-items:center;gap:6px">
+    <span>${aiConfigured ? '✨ Gemini AI is thinking...' : '⚡ Generating response...'}</span>
+  </span>`;
+  if (stream) { stream.appendChild(loader); stream.scrollTop = stream.scrollHeight; }
+
+  try {
+    const res = await fetch(API + '/api/assistant/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: t, level: LV, history: floatingCH.slice(-6) }),
+      signal: AbortSignal.timeout(25000)
+    });
+    const data = await res.json();
+    if (res.ok && data.reply) {
+      const followUps = parseFollowUps(data.reply);
+      floatingCH.push({
+        r: 't', x: data.reply, html: true,
+        isDemo: Boolean(data.isDemo),
+        provider: data.provider || (aiConfigured ? 'Google Gemini 1.5 Flash' : 'Demo Responses'),
+        f: followUps.length ? followUps : SAMPLE.slice(0, 4)
+      });
+    } else {
+      floatingFallback(t);
+    }
+  } catch (err) {
+    console.warn('Floating tutor error, using fallback:', err);
+    floatingFallback(t);
+  } finally {
+    floatingAsking = false;
+    if (sendBtn) sendBtn.disabled = false;
+    save();
+    drawFloatingChat();
+  }
+}
+
+function floatingFallback(t) {
+  const l = t.toLowerCase();
+  const h = TUT.find(e => e.k.some(k => l.includes(k)));
+  floatingCH.push(h
+    ? { r: 't', x: (LV === 'b' ? '[Beginner] ' : '[Intermediate] ') + h[LV], f: h.f, isDemo: true, provider: 'Demo Responses' }
+    : { r: 't', x: 'I can help with Physics, Chemistry, Biology, Maths, and Computer Science! Try asking about atoms, Newton\'s laws, derivatives, or algorithms.', f: SAMPLE.slice(0, 4), isDemo: true, provider: 'Demo Responses' }
+  );
+}
+
+function clearFloatingChat() {
+  floatingCH = [];
+  drawFloatingChat();
 }
 
 // ─── Initialise ─────────────────────────────────────────────────────────────

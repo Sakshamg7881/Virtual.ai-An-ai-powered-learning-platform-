@@ -256,64 +256,9 @@ const courses = [
   }
 ];
 
-// ─── Quiz Master Data ────────────────────────────────────────────────────────
-const quizzesData = {
-  Mathematics: {
-    category: 'Mathematics',
-    description: 'Algebra, trigonometry, and geometric principles.',
-    questions: [
-      { id: 'm1', question: 'What is 3² + 4²?', options: ['12', '25', '49', '7'], answerIndex: 1 },
-      { id: 'm2', question: 'What is the derivative of x²?', options: ['x', '2x', 'x²', '2'], answerIndex: 1 },
-      { id: 'm3', question: 'A right-angled triangle has legs 6 and 8. Its hypotenuse is…', options: ['10', '14', '12', '100'], answerIndex: 0 },
-      { id: 'm4', question: 'What is the area of a circle with radius 5?', options: ['25π', '10π', '5π', '50π'], answerIndex: 0 },
-      { id: 'm5', question: 'sin(30°) equals…', options: ['1/2', '√3/2', '1', '√2/2'], answerIndex: 0 }
-    ]
-  },
-  Physics: {
-    category: 'Physics',
-    description: 'Forces, energy, circuit physics, and mechanics.',
-    questions: [
-      { id: 'p1', question: 'What is the SI unit of force?', options: ['Joule', 'Watt', 'Newton', 'Pascal'], answerIndex: 2 },
-      { id: 'p2', question: 'A 2 kg mass is pushed by 10 N. Its acceleration is…', options: ['20 m/s²', '5 m/s²', '0.2 m/s²', '12 m/s²'], answerIndex: 1 },
-      { id: 'p3', question: 'In Ohm\'s Law I = V/R, doubling R while keeping V constant causes current I to…', options: ['double', 'stay same', 'halve', 'quadruple'], answerIndex: 2 },
-      { id: 'p4', question: 'What is the speed of light in vacuum approximately?', options: ['3×10⁶ m/s', '3×10⁸ m/s', '3×10¹⁰ m/s', '3×10⁴ m/s'], answerIndex: 1 },
-      { id: 'p5', question: 'Kinetic energy is calculated with which formula?', options: ['mv', '½mv²', 'mgh', 'Fd'], answerIndex: 1 }
-    ]
-  },
-  Chemistry: {
-    category: 'Chemistry',
-    description: 'Elements, atomic properties, bonding, and compounds.',
-    questions: [
-      { id: 'c1', question: 'What is the chemical symbol for sodium?', options: ['S', 'So', 'Na', 'N'], answerIndex: 2 },
-      { id: 'c2', question: 'H₂O is the chemical formula for…', options: ['Hydrogen peroxide', 'Water', 'Salt', 'Oxygen'], answerIndex: 1 },
-      { id: 'c3', question: 'The pH of pure neutral water at room temperature is…', options: ['1', '7', '10', '14'], answerIndex: 1 },
-      { id: 'c4', question: 'How many total electrons does an uncharged carbon atom possess?', options: ['4', '6', '8', '12'], answerIndex: 1 },
-      { id: 'c5', question: 'Which chemical bond involves the sharing of electron pairs?', options: ['Ionic', 'Covalent', 'Metallic', 'Hydrogen'], answerIndex: 1 }
-    ]
-  },
-  'Computer Science': {
-    category: 'Computer Science',
-    description: 'Algorithms, data structures, binary, and computing.',
-    questions: [
-      { id: 'cs1', question: 'What is the decimal number 5 represented in binary?', options: ['110', '011', '101', '111'], answerIndex: 2 },
-      { id: 'cs2', question: 'Which programming control structure repeats a block of instructions?', options: ['Variable', 'Comment', 'Loop', 'Constant'], answerIndex: 2 },
-      { id: 'cs3', question: 'An algorithm is best defined as…', options: ['A computer brand', 'A step-by-step procedure to solve a problem', 'A virus', 'A monitor screen'], answerIndex: 1 },
-      { id: 'cs4', question: 'What does CPU stand for?', options: ['Central Processing Unit', 'Central Program Utility', 'Computer Personal Unit', 'Central Power Unit'], answerIndex: 0 },
-      { id: 'cs5', question: 'Which data structure follows First-In, First-Out (FIFO) ordering?', options: ['Stack', 'Queue', 'Tree', 'Array'], answerIndex: 1 }
-    ]
-  },
-  Biology: {
-    category: 'Biology',
-    description: 'Cell biology, organ systems, and molecular genetics.',
-    questions: [
-      { id: 'b1', question: 'Which organelle produces the cell\'s energy currency (ATP)?', options: ['Nucleus', 'Ribosome', 'Mitochondria', 'Golgi'], answerIndex: 2 },
-      { id: 'b2', question: 'In DNA base pairing, Adenine (A) bonds specifically with…', options: ['Guanine', 'Cytosine', 'Thymine', 'Uracil'], answerIndex: 2 },
-      { id: 'b3', question: 'The fundamental structural and functional unit of life is the…', options: ['Organ', 'Tissue', 'Cell', 'Atom'], answerIndex: 2 },
-      { id: 'b4', question: 'In plant cells, photosynthesis primarily takes place inside…', options: ['Mitochondria', 'Chloroplasts', 'Nucleus', 'Ribosomes'], answerIndex: 1 },
-      { id: 'b5', question: 'How many total chromosomes are found in a normal human somatic cell?', options: ['23', '46', '44', '48'], answerIndex: 1 }
-    ]
-  }
-};
+// ─── Quiz Master Data (52 Original STEM Questions from public/quiz-data.js) ──
+const { quizzesData, questions: allQuizQuestions } = require('../public/quiz-data.js');
+
 
 // Predefined Demo Assistant Responses (used when no real AI key is configured)
 const demoTutorDictionary = [
@@ -506,65 +451,78 @@ app.get('/api/quizzes', (req, res) => {
 
 // 7. POST /api/quizzes/submit
 app.post('/api/quizzes/submit', (req, res) => {
-  const { category, answers } = req.body || {};
+  const { category, answers, questionIds } = req.body || {};
 
-  if (!category || typeof category !== 'string') {
+  if (!answers || typeof answers !== 'object') {
     return res.status(400).json({
       error: 'Bad Request',
-      message: 'Category string is required in the request body.'
+      message: 'Answers must be provided as an object or array.'
     });
   }
 
-  const matchedCat = Object.keys(quizzesData).find(k => k.toLowerCase() === category.toLowerCase().trim());
-  if (!matchedCat) {
-    return res.status(404).json({
-      error: 'Not Found',
-      message: `Quiz category "${category}" does not exist.`
-    });
+  let questionsToEvaluate = [];
+  let evaluatedCategory = category || 'Custom Quiz';
+
+  if (Array.isArray(questionIds) && questionIds.length > 0) {
+    questionsToEvaluate = questionIds.map(id => allQuizQuestions.find(q => q.id === id)).filter(Boolean);
+  } else if (category && quizzesData[category]) {
+    questionsToEvaluate = quizzesData[category].questions;
+    evaluatedCategory = category;
+  } else if (category) {
+    const matchedKey = Object.keys(quizzesData).find(k => k.toLowerCase() === String(category).toLowerCase().trim());
+    if (matchedKey) {
+      questionsToEvaluate = quizzesData[matchedKey].questions;
+      evaluatedCategory = matchedKey;
+    }
   }
 
-  if (!answers || (typeof answers !== 'object')) {
+  if (questionsToEvaluate.length === 0) {
+    // If neither category nor valid questionIds, default to all questions or bad request
     return res.status(400).json({
       error: 'Bad Request',
-      message: 'Answers must be provided as an array or map of question index to selected option index.'
+      message: 'A valid category or questionIds array must be provided.'
     });
   }
 
-  const quiz = quizzesData[matchedCat];
   let correctCount = 0;
   const questionResults = [];
 
-  quiz.questions.forEach((q, idx) => {
+  questionsToEvaluate.forEach((q, idx) => {
     let selectedOption = null;
     if (Array.isArray(answers)) {
       selectedOption = answers[idx];
-    } else if (answers[idx] !== undefined) {
-      selectedOption = answers[idx];
     } else if (answers[q.id] !== undefined) {
       selectedOption = answers[q.id];
+    } else if (answers[idx] !== undefined) {
+      selectedOption = answers[idx];
     }
 
-    const isCorrect = Number(selectedOption) === q.answerIndex;
+    const isAnswered = selectedOption !== null && selectedOption !== undefined && selectedOption !== '';
+    const numericSelected = isAnswered ? Number(selectedOption) : null;
+    const isCorrect = isAnswered && numericSelected === q.answerIndex;
     if (isCorrect) correctCount++;
 
     questionResults.push({
       questionId: q.id,
       question: q.question,
-      selectedIndex: selectedOption !== null && selectedOption !== undefined ? Number(selectedOption) : null,
-      selectedAnswer: selectedOption !== null && selectedOption !== undefined && q.options[selectedOption] ? q.options[selectedOption] : 'Unanswered',
+      category: q.category,
+      level: q.level,
+      selectedIndex: numericSelected,
+      selectedAnswer: isAnswered && q.options[numericSelected] ? q.options[numericSelected] : 'Unanswered',
       correctIndex: q.answerIndex,
       correctAnswer: q.options[q.answerIndex],
-      isCorrect: isCorrect
+      isCorrect: isCorrect,
+      explanation: q.explanation || 'Verified conceptual reasoning provided by VirtualLearn AI question bank.'
     });
   });
 
-  const total = quiz.questions.length;
-  const percentage = Math.round((correctCount / total) * 100);
-  const pointsEarned = correctCount * 10 + (correctCount === total ? 10 : 0);
+  const total = questionsToEvaluate.length;
+  const percentage = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+  const pointsEarned = correctCount * 10 + (correctCount === total && total > 0 ? 10 : 0);
 
   res.json({
     success: true,
-    category: matchedCat,
+    category: evaluatedCategory,
     score: correctCount,
     total: total,
     percentage: percentage,
@@ -573,7 +531,7 @@ app.post('/api/quizzes/submit', (req, res) => {
       ? 'Outstanding! Perfect score achieved.'
       : percentage >= 70
         ? 'Great job! Strong subject understanding.'
-        : 'Good effort! Review the study resources and retry.',
+        : 'Good effort! Review the explanations and retry.',
     results: questionResults
   });
 });

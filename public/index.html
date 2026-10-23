@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -62,7 +62,7 @@
       </div>
       <div class="footer-links">
         <h4>More</h4>
-        <a href="#tutor">Demo Tutor</a>
+        <a href="#tutor">AI Tutor</a>
         <a href="#dash">Dashboard</a>
         <a href="#courses">Courses</a>
         <a href="#about">About</a>
@@ -79,6 +79,51 @@
   </div>
 </footer>
 
+<!-- ─── Persistent Floating AI Tutor Widget (Accessible from all sections) ── -->
+<div id="floating-tutor-root" class="floating-tutor-root">
+  <button id="floating-tutor-trigger" class="floating-tutor-trigger" onclick="toggleFloatingTutor()" aria-label="Open AI Tutor Assistant" title="Open AI Tutor Assistant">
+    <span class="trigger-sparkle">✨</span>
+    <span class="trigger-icon">🤖</span>
+    <span class="trigger-label">AI Tutor</span>
+  </button>
+
+  <div id="floating-tutor-modal" class="floating-tutor-modal" style="display:none" role="dialog" aria-modal="false" aria-labelledby="floating-tutor-header-title">
+    <div class="floating-tutor-header">
+      <div class="flex items-center gap-2">
+        <span class="pulse-indicator"></span>
+        <div>
+          <div id="floating-tutor-header-title" class="font-bold text-sm text-primary">VirtualLearn AI Tutor</div>
+          <div id="floating-tutor-mode-tag" class="text-xs text-muted">English & Hinglish Support</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="icon-btn-sm" onclick="clearFloatingChat()" title="Clear conversation" aria-label="Clear chat">🗑️</button>
+        <button class="icon-btn-sm" onclick="toggleFloatingTutor()" title="Minimize" aria-label="Minimize AI Tutor">✕</button>
+      </div>
+    </div>
+
+    <div id="floating-context-banner" class="floating-context-banner">
+      <span class="context-pill">Context: Current Learning Section</span>
+    </div>
+
+    <div id="floating-chat-stream" class="floating-chat-stream" aria-live="polite">
+      <!-- Conversation items rendered here -->
+    </div>
+
+    <div id="floating-chip-row" class="floating-chip-row">
+      <!-- Dynamic contextual quick questions -->
+    </div>
+
+    <div class="floating-input-container">
+      <input id="floating-user-input" type="text" class="input floating-text-input" placeholder="Ask anything in English or Hinglish..." onkeydown="event.key==='Enter'&&sendFloatingMessage()">
+      <button id="floating-send-action" class="btn btn-primary btn-sm flex items-center gap-1" onclick="sendFloatingMessage()" aria-label="Send query">
+        <span>Send</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="quiz-data.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
