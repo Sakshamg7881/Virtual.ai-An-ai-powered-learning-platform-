@@ -1,6 +1,6 @@
 # 🎓 VirtualLearn AI — Learn Beyond Reality
 
-Live Link - "https://virtuallearn-ai.vercel.app/" 
+Live Link - "https://virtuallearn-ai.vercel.app/".
 
 > An interactive, immersive STEM learning platform featuring real-time 3D models, hands-on virtual science lab simulations, multi-category quizzes, student analytics, and a lightweight Node.js/Express backend.
 
