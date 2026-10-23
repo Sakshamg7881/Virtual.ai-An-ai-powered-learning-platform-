@@ -173,4 +173,4 @@ This project is licensed under the **MIT License**. Feel free to use, modify, an
 
 ---
 
-Made with ❤️ by [Saksham](https://github.com/Sakshamg7881)
+Made with ❤️ by [Saksham Gupta and Hariom mittal] (https://github.com/Sakshamg7881)
